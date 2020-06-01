@@ -157,3 +157,9 @@ class DevType(IntEnum):
 class ResetStatus(IntEnum):
     RESET = 0
     UNSET = 1
+
+class Gearbox(IntEnum):
+    GBOX_MAX = 10
+    
+class Retimer(IntEnum):
+    RETIMER_MAX = 5

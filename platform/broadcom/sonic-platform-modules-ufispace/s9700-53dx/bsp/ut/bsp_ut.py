@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import sys
+import json
 from time import sleep
 from itertools import chain
 
@@ -31,10 +32,14 @@ from bsp.utility.uartmux_utility import UARTMuxUtility
 from bsp.utility.usbmux_utility import USBMuxUtility
 from bsp.utility.thermal_utility import ThermalUtility
 from bsp.utility.bsp_utility import BSPUtility
+from bsp.utility.rov_utility import ROVUtility
+from bsp.utility.intr_utility import INTRUtility
 from bsp.const.const import QSFP
 from bsp.const.const import QSFPDD
 from bsp.const.const import CPLDConst
 from bsp.const.const import Led
+from bsp.const.const import Gearbox
+from bsp.const.const import Retimer
 
 def _group_to_range(group):
     group = ''.join(group.split())
@@ -67,14 +72,14 @@ def ut_cpld(argv):
         if len(argv) < 3:
             cpld_usage(argv[0])
         elif argv[2] == '1':
-            print(util.get_board_info())
+            print(json.dumps(util.get_board_info(), sort_keys=False, indent=4))
         elif argv[2] == '2':
-            print(util.get_cpld_id())    
+            print(json.dumps(util.get_cpld_id(), sort_keys=False, indent=4))
         elif argv[2] == '3':
             if len(argv) < 4:
                 cpld_usage(argv[0])
             else:
-                print(util.get_cpld_version(int(argv[3])))
+                print(json.dumps(util.get_cpld_version(int(argv[3])), sort_keys=False, indent=4))
         elif argv[2] == '4':       
             if len(argv) < 4:
                 cpld_usage(argv[0])
@@ -134,11 +139,11 @@ def ut_eeprom(argv):
         elif argv[2] == '4':
             port_list = _rangeexpand(argv[3])
             for port in port_list:
-                print(util.get_qsfp_info(port))
+                print(json.dumps(util.get_qsfp_info(port), sort_keys=False, indent=4))
         elif argv[2] == '5':
             port_list = _rangeexpand(argv[3])
             for port in port_list:
-                print(util.get_qsfpdd_info(port))        
+                print(json.dumps(util.get_qsfpdd_info(port), sort_keys=False, indent=4))
         # elif argv[2] == '4':
             # print(util.dump_sfp_eeprom(int(argv[3])))
         elif argv[2] == '6':
@@ -413,7 +418,6 @@ def sfp_usage(cmd):
     print("       option1: Port number, 0-1")
     print("       option2: 0 for enable, 1 for disable")
     
-
 def ut_sfp(argv):
     try:
         util = SFPUtility()
@@ -522,9 +526,74 @@ def ut_bsp(argv):
     except:
         raise    
  
+def rov_usage(cmd):
+    print("Usage: " + cmd + " ROV 1|2|help" )
+    print("    1: Get J2 ROV info")    
+    print("    2: Set J2 ROV")
+
+def ut_rov(argv):
+    try:
+        util = ROVUtility()
+
+        if len(argv) < 3:
+            rov_usage(argv[0])
+        elif argv[2] == '1':
+            print(json.dumps(util.get_j2_rov(), sort_keys=False, indent=4))
+        elif argv[2] == '2':
+            util.set_j2_rov()            
+        else:
+            rov_usage(argv[0])
+    except:
+        raise
+
+def intr_usage(cmd):
+    cpld_max = CPLDConst.CPLD_MAX - 1
+    print("Usage: " + cmd + " INTR 1|2|3|4|help [option1]")
+    print("    1: Init I2C Alert")
+    print("    2: Clear I2C Alert")
+    print("    3: Clear All Intr")
+    print("    4: Get CPLD to CPU Interrupt")
+    print("    5: Get All CPLD Interrupt")
+    print("    6: Get CPLD Interrupt")
+    print("       option1: CPLD number, 0-{0}".format(cpld_max))
+    print("    7: Get Gearbox Interrupt")
+    print("    8: Get Retimer Interrupt")
+
+def ut_intr(argv):
+    try:
+        util = INTRUtility()
+
+        if len(argv) < 3:
+            intr_usage(argv[0])
+        elif argv[2] == '1':
+            util.init_i2c_alert()
+        elif argv[2] == '2':
+            util.clear_i2c_alert()
+        elif argv[2] == '3':
+            util.clear_all_intr()
+        elif argv[2] == '4':
+            print(json.dumps(util.get_cpld_to_cpu_intr(), sort_keys=False, indent=4))
+        elif argv[2] == '5':
+            print(json.dumps(util.get_all_cpld_intr(), sort_keys=False, indent=4))
+        elif argv[2] == '6':
+            if len(argv) < 4:
+                intr_usage(argv[0])
+            else:      
+                cpld_list = _rangeexpand(argv[3])
+                for cpld in cpld_list:
+                    print("[" + str(cpld) + "] " + str(util.get_cpld_intr(cpld)))
+        elif argv[2] == '7':
+            print(json.dumps(util.get_gbox_intr(), sort_keys=False, indent=4))
+        elif argv[2] == '8':
+            print(json.dumps(util.get_retimer_intr(), sort_keys=False, indent=4))    
+        else:
+            intr_usage(argv[0])
+    except:
+        raise
+        
 def main():
     if len(sys.argv) < 2:
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
         return
 
     if sys.argv[1] == 'CPLD':
@@ -551,15 +620,19 @@ def main():
         ut_thermal(sys.argv)
     elif sys.argv[1] == 'BSP':
         ut_bsp(sys.argv)    
+    elif sys.argv[1] == 'ROV':
+        ut_rov(sys.argv)    
+    elif sys.argv[1] == 'INTR':
+        ut_intr(sys.argv)
     elif sys.argv[1] == 'help':
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
     else:
         print("Invalid arguments:")
 
         # print command line arguments
         for arg in sys.argv[1:]:
             print(arg)
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
 
 if __name__ == "__main__":
     main()

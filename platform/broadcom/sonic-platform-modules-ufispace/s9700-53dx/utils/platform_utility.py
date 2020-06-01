@@ -82,11 +82,14 @@ class PlatformUtility:
             #CPLD 0x30 missing workaround :END
 
             # I2C Mux
-            subprocess.run(['modprobe', 'i2c_mux_pca954x'])
+            subprocess.run(['modprobe', 'i2c_mux_pca954x', 'force_deselect_on_exit=1'])
             self.i2c_mux.init()
 
             # EEPROM
             subprocess.run(['modprobe', 'eeprom_mb'])
+            mod = subprocess.getoutput("lsmod | grep sff_8436_eeprom")
+            if mod != "":
+                subprocess.run(['rmmod', 'sff_8436_eeprom'])
             subprocess.run(['modprobe', 'optoe'])
             self.eeprom = EEPRom(self.board_id)
             self.eeprom.init()

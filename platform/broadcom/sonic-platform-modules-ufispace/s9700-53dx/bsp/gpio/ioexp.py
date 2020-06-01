@@ -624,3 +624,33 @@ class IOExpander:
         except Exception as e:
             self.logger.error("set_beacon_led {0} failed, error: {1}".format(value, e))
             raise                              
+
+    def get_cpld_to_cpu_intr(self):
+        gpio_vals = []
+        try:
+            for i in range(3, 7):
+                gpio_num = self.IOExpanders["9539_HOST_GPIO_I2C"]["init_cfg"][i]["gpio"]
+                sysfs_path = self.PATH_SYS_GPIO_VALUE.format(gpio_num)        
+                gpio_vals.append(int(self._read_gpio(sysfs_path)))
+            return gpio_vals              
+        except Exception as e:
+            self.logger.error("get_cpld_to_cpu_intr() failed, error: {}".format(e))
+            raise
+    
+    def dump_reg(self, ioexp_name):
+        reg_vals = []
+        
+        try:
+            gpios = self.IOExpanders[ioexp_name]["init_cfg"]
+            
+            for gpio in gpios:
+                gpio_num = gpio["gpio"]
+                sysfs_path = self.PATH_SYS_GPIO_VALUE.format(gpio_num)
+                gpio_content = self._read_gpio(sysfs_path)
+                gpio_value = int(gpio_content)
+                reg_vals.append(gpio_value)
+            
+            return reg_vals
+        except Exception as e:
+            self.logger.error("dump_reg() failed, error: {}".format(e))
+            raise            

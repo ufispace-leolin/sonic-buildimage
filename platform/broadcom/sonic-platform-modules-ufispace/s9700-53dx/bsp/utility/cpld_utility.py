@@ -46,6 +46,10 @@ class CPLDUtility:
             if devType not in range(DevType.RETIMER+1):
                 raise ValueError("Dev Type({}) Reset is not supported ".format(devType))    
                 
+    def _version_h(self, version):
+        return "{}.{:02d}".format(version >> 6,
+                                  version & 0b00111111)
+
     def get_board_info(self):
         try:
             board_info = self.cpld.get_board_info()            
@@ -57,13 +61,17 @@ class CPLDUtility:
         try:
             if target == CPLDSource.CPU:
                 cpld_version = self.cpld.get_cpu_board_cpld_version()
-                return {"version":"X.%02x" % cpld_version}
+                return {"version":"X.%02x" % cpld_version,
+                        "version_h": self._version_h(cpld_version)}
             elif target == CPLDSource.MB:
                 result = []
+                result_h = []
                 cpld_versions = self.cpld.get_main_board_cpld_version()
                 for i in range(len(cpld_versions)):                    
                     result.append("X.%02x" % cpld_versions[i])
-                return {"version": result}
+                    result_h.append(self._version_h(cpld_versions[i]))
+                return {"version": result,
+                        "version_h": result_h}
             else:
                 raise ValueError("target(" + str(target) + ") is out of range")
             

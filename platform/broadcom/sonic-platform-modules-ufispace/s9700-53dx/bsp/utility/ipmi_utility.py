@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from bsp.ipmi.ipmitool import IPMITool 
 from bsp.common.logger import Logger
+from bsp.ipmi.ipmitool import IPMITool 
 
 class IPMIUtility:
 

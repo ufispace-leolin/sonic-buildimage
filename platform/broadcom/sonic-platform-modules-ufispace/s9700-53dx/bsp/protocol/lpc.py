@@ -26,12 +26,14 @@ class LPCDevType(Enum):
     CPLD_ON_CPU_BOARD = 0
     CPLD_ON_MAIN_BOARD = 1
     BDE_GPIO_ON_CPU_BOARD = 2
+    CPU_I2C_ALERT = 3
 
 class LPC:
 
     BASE_ADDR = {LPCDevType.CPLD_ON_CPU_BOARD: 0x600,
                  LPCDevType.CPLD_ON_MAIN_BOARD: 0x700,
-                 LPCDevType.BDE_GPIO_ON_CPU_BOARD: 0x500}
+                 LPCDevType.BDE_GPIO_ON_CPU_BOARD: 0x500,
+                 LPCDevType.CPU_I2C_ALERT: 0xf000}
 
     def __init__(self):
         log = Logger(__name__)

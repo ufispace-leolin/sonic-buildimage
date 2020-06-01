@@ -71,6 +71,9 @@ class CPLD:
     CPLD_HW_REV_BIT = 0b00001100
     CPLD_BUILD_REV_BIT = 0b00000011
     CPLD_PORT_INT_BIT = 0b00000001
+    CPLD_GBOX_INT_BIT = 0b00000010
+    CPLD_PORT_PRE_BIT = 0b00001000
+    CPLD_RTMR_INT_BIT = 0b00000001
     
     CPLD_QSFP_STATUS_INT_BIT = 0b00000001
     CPLD_QSFP_STATUS_ABS_BIT = 0b00000010    
@@ -105,11 +108,14 @@ class CPLD:
     CPLD_J2_RESET_BIT = 0b01000000    
     CPLD_RETIMER_RESET_BIT = 0b00000001
     
+    CPLD_J2_ROV_BIT = 0b00001110
+    
     ATTR_CPLD_VERSION = "cpld_version"
     ATTR_CPLD_ID = "cpld_id"
     ATTR_CPLD_BOARD_TYPE = "cpld_board_type"
     ATTR_CPLD_EXT_BOARD_TYPE = "cpld_ext_board_type"
-    ATTR_CPLD_INT = "cpld_interrupt"
+    ATTR_CPLD_INTR = "cpld_interrupt"
+    ATTR_CPLD_INTR_2 = "cpld_interrupt_2"
     ATTR_CPLD_QSFPDD_PORT_STATUS = "cpld_qsfpdd_port_status"
     ATTR_CPLD_QSFPDD_PORT_CONFIG = "cpld_qsfpdd_port_config"
     ATTR_CPLD_QSFP_PORT_STATUS = "cpld_qsfp_port_status"
@@ -124,6 +130,8 @@ class CPLD:
     ATTR_CPLD_RESET_CTRL = "cpld_reset_control"
     ATTR_CPLD_RESET_MAC = "cpld_reset_mac"
     ATTR_CPLD_RESET_RETIMER = "cpld_reset_retimer"
+    ATTR_CPLD_GBOX_INTR = "cpld_gbox_intr"
+    ATTR_CPLD_RETIMER_INTR = "cpld_retimer_intr"
     
     PATH_SYS_I2C_DEVICES = "/sys/bus/i2c/devices"      
 
@@ -344,13 +352,33 @@ class CPLD:
         return reg_vals
     
     def get_port_interrupt(self, cpld_index):
-        cpld_attr = self.ATTR_CPLD_INT
+        cpld_attr = self.ATTR_CPLD_INTR
         reg_mask = self.CPLD_PORT_INT_BIT        
         
         reg_val = self._read_cpld_reg(cpld_index, cpld_attr)        
         interrupt = (reg_val & reg_mask) >> self._get_shift(reg_mask)              
         
         return interrupt
+    
+    def get_intr_reg(self, cpld_index, reg_index):
+        cpld_attr = [self.ATTR_CPLD_INTR, self.ATTR_CPLD_INTR_2]
+        
+        #only cpld0 has intr 2
+        if cpld_index != 0 and reg_index > 0:
+            raise ValueError("interrupt_2 reg is only available in cpld 0")
+        
+        reg_val = self._read_cpld_reg(cpld_index, cpld_attr[reg_index])        
+        
+        return reg_val
+    
+    def get_port_presence(self, cpld_index):
+        cpld_attr = self.ATTR_CPLD_INTR
+        reg_mask = self.CPLD_PORT_PRE_BIT        
+        
+        reg_val = self._read_cpld_reg(cpld_index, cpld_attr)        
+        presence = (reg_val & reg_mask) >> self._get_shift(reg_mask)              
+        
+        return presence
     
     ########## FOR SFP+ ##########    
     def sfp_get_presence(self, port_num):
@@ -930,3 +958,36 @@ class CPLD:
             reg_val &= ~(Led.MASK_BLINK << reg_shift)
                         
         self._write_cpld_reg(cpld_index, cpld_attr, reg_val, attr_index)
+
+    ########## FOR J2 ROV ##########    
+    def get_j2_rov_stamp(self):        
+        cpld_index = CPLDConst.CPLD_1
+        cpld_attr = self.ATTR_CPLD_PSU_STATUS
+        index = 0 
+        reg_val = self._read_cpld_reg(cpld_index, cpld_attr, index)
+        
+        mask = self.CPLD_J2_ROV_BIT
+        j2_rov_stamp = (reg_val & mask) >> self._get_shift(mask)        
+         
+        return j2_rov_stamp
+    
+    ########## FOR Gearbox ##########    
+    def gbox_get_intr(self):
+        cpld_index = CPLDConst.CPLD_1
+        cpld_attr = self.ATTR_CPLD_GBOX_INTR
+        index = 0
+                    
+        reg_val_1 = self._read_cpld_reg(cpld_index, cpld_attr, index)
+        reg_val_2 = self._read_cpld_reg(cpld_index, cpld_attr, index+1)
+         
+        return reg_val_1, reg_val_2
+    
+    ########## FOR Retimer ##########
+    def retimer_get_intr(self):
+        cpld_index = CPLDConst.CPLD_1
+        cpld_attr = self.ATTR_CPLD_RETIMER_INTR
+         
+        reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
+         
+        return reg_val
+

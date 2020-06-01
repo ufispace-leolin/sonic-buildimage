@@ -37,7 +37,6 @@ class EEPRom:
     I2C_ADDR_EEPROM_QSFP = 0x50
     I2C_ADDR_EEPROM_QSFPDD = 0x50
 
-
     QSFPReg = {
         "SFF8436": {
                "TEMP":    [0, 22], #[PAGE, ADDR]
@@ -195,7 +194,7 @@ class EEPRom:
                     pass
                 else:
                     with open(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(bus_num) + "/new_device", "w") as f:
-                        f.write("sff8436 " + hex(self.I2C_ADDR_EEPROM_QSFPDD))
+                        f.write("optoe3 " + hex(self.I2C_ADDR_EEPROM_QSFPDD))
 
                 self.logger.debug("QSFPDD(" + str(port) + ") EEPROM:" + qsfpdd_eeprom_sysfs_path)
         except Exception as e:
