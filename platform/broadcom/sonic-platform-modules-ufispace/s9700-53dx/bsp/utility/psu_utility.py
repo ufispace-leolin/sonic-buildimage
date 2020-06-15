@@ -43,7 +43,7 @@ class PSUUtility:
 
             return ret_val
         except Exception as e:
-            print("get_psu_presence failed, psu_num={0}, error: {1}".format(psu_num, e))                    
+            self.logger.error("get_psu_presence failed, psu_num={}, error: {}".format(psu_num, e))                    
         
     def get_psu_power_ok(self, psu_num):
         try:
@@ -57,4 +57,4 @@ class PSUUtility:
 
             return ret_val
         except Exception as e:
-            print("get_psu_power_ok failed, psu_num={0}, error: {1}".format(psu_num, e))
+            self.logger.error("get_psu_power_ok failed, psu_num={0}, error: {1}".format(psu_num, e))

@@ -41,6 +41,8 @@ class IPMITool:
     IPMI_SDR_LIST_COMMAND = "ipmitool sdr list all"
     IPMI_UARTMUX_COMMAND = "ipmitool raw 0x3c 0x11 0x50 0x1 {}"
     IPMI_UCD_RESET_CMD = "ipmitool raw 0x3c 0x24 0x01 0x00"
+    IPMI_LAN = "ipmitool lan print"
+    IPMI_BMC_IP = "{} | grep 'IP Address              :' | awk '{{ print $4 }}'".format(IPMI_LAN)
     IPMI_DEV = "/dev/ipmi0"
     
     def __init__(self):
@@ -66,16 +68,16 @@ class IPMITool:
         return sensor_list
     
     def _run_ipmitool(self, command):                    
-        output = subprocess.getoutput(command)
+        status, output = subprocess.getstatusoutput(command)
         
-        return output
+        return status, output
         
     def get_sensor(self, keyword=""):
         all_sensor_list = []
         matched_sensor_list = []
         
         try:
-            output = self._run_ipmitool(self.IPMI_SDR_LIST_COMMAND)            
+            _, output = self._run_ipmitool(self.IPMI_SDR_LIST_COMMAND)            
             all_sensor_list = self._parse_sdr(output)
             
             if keyword:
@@ -108,10 +110,10 @@ class IPMITool:
 
     def set_uart_mux(self, source):
         try:
-            output = self._run_ipmitool(self.IPMI_UARTMUX_COMMAND.format(hex(source)))            
-            
+            cmd = self.IPMI_UARTMUX_COMMAND.format(hex(source))
+            output = self._run_ipmitool(cmd)
         except Exception as e:
-            self.logger.error("get_sensor() fail, error: " + str(e))
+            self.logger.error("set_uart_mux() fail, cmd={}, error={}".format(cmd, str(e)))
             raise        
             
         return output    
@@ -124,6 +126,19 @@ class IPMITool:
             self.logger.error("reset_ucd() fail, cmd={}, error={}".format(cmd, str(e)))
             raise
     
+    def get_bmc_ip(self):
+        cmd = self.IPMI_BMC_IP
+        try:            
+            retcode, output = self._run_ipmitool(cmd)
+            if retcode != 0:
+                self.logger.error("get_bmc_ip() fail, retcode={}, output={}".format(cmd, retcode, output))
+                return ""
+            else:
+                return output                
+        except Exception as e:
+            self.logger.error("get_bmc_ip() fail, cmd={}, error={}".format(cmd, str(e)))
+            raise
+            
     def init(self):
         pass
 

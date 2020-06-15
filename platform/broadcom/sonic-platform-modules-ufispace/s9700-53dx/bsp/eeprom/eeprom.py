@@ -21,21 +21,36 @@ import subprocess
 
 from bsp.common.logger import Logger
 from bsp.i2c_mux.i2c_mux import I2CMux
-from bsp.gpio.ioexp import IOExpander
 from bsp.const.const import QSFP
 from bsp.const.const import QSFPDD
 from bsp.const.const import BID
+from bsp.utility.sysfs_utility import SysfsUtility
+from bsp.utility.board_id_utility import BrdIDUtility
      
 class EEPRom:
 
-    PATH_SYS_I2C_DEVICES = "/sys/bus/i2c/devices"
-
     I2C_BUS_CPU_EEPROM = 0
 
-    I2C_ADDR_EEPROM_CPU  = 0x57
-    I2C_ADDR_EEPROM_SFP  = 0x50
-    I2C_ADDR_EEPROM_QSFP = 0x50
-    I2C_ADDR_EEPROM_QSFPDD = 0x50
+    DEV_TYPE_CPU    = 0
+    DEV_TYPE_QSFP   = 1
+    DEV_TYPE_QSFPDD = 2
+    DEV_TYPE_MAX = 3
+
+    I2C_ADDR_EEPROM = [0x57,
+                       0x50,
+                       0x50]
+
+    DRIVER_TYPE = ["mb_eeprom",
+                   "sff8436", 
+                   "optoe3"]
+    
+    MAX_NUM = [1, 
+               QSFP.MAX_PORT, 
+               QSFPDD.MAX_PORT]
+
+    DEV_NAME = ["CPU",
+                "QSFP",
+                "QSFPDD"]
 
     QSFPReg = {
         "SFF8436": {
@@ -81,12 +96,13 @@ class EEPRom:
     EEPROM_CMD = {"READ_BLK": "dd if={} bs=128 count=1 skip={} status=none | base64",
                   "READ_BYTE": "echo '{}' | base64 -d -i | hexdump -s {} -n {} -e '{}/1 \"%{}\"'"}
 
-    def __init__(self, board_id):
+    def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()
-        self.i2c_mux = I2CMux(board_id)
-        self.ioexp = IOExpander()
-        self.board_id = board_id
+        self.i2c_mux = I2CMux()
+        self.sysfs_util = SysfsUtility()
+        self.brd_id_util = BrdIDUtility()
+        self.board_id = self.brd_id_util.get_board_id()
 
     def _qsfp_port_fp2phy(self, fp_port):
         if 0 <= fp_port <= 19:
@@ -115,7 +131,7 @@ class EEPRom:
         else:                  # P32~P39
             mux = "9548_CHILD_QSFP4"
 
-        return self.i2c_mux.MUXs[mux].ch_bus[ch]
+        return self.i2c_mux.MUXs[mux].chnl_bus[ch]
 
     def _get_qsfpdd_bus_num(self, port_num):
         if self.board_id == BID.NCP1_1_PROTO:
@@ -129,7 +145,7 @@ class EEPRom:
             else:                  # P8~P12
                 mux = "9548_CHILD_QSFPDD1"
 
-            return self.i2c_mux.MUXs[mux].ch_bus[ch]
+            return self.i2c_mux.MUXs[mux].chnl_bus[ch]
 
         elif (self.board_id & BID.BUILD_REV_MASK) >= BID.NCP1_1_ALPHA:
             port_grp = int(port_num / 8)
@@ -140,67 +156,115 @@ class EEPRom:
             else:                  # P8~P12
                 mux = "9548_CHILD_QSFPDD1"
 
-            return self.i2c_mux.MUXs[mux].ch_bus[ch]
+            return self.i2c_mux.MUXs[mux].chnl_bus[ch]
         else:
             sys.exit("Invalid Board ID:" + str(self.board_id))
             
-    def _create_cpu_eeprom_sysfs(self):
+    def _create_eeprom_sysfs(self, dev_type):
+        max_port = self.MAX_NUM[dev_type]        
+        i2c_addr = self.I2C_ADDR_EEPROM[dev_type]
+        driver_type = self.DRIVER_TYPE[dev_type]
+        dev_name = self.DEV_NAME[dev_type]
+                                  
         try:
-            cpu_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(self.I2C_BUS_CPU_EEPROM) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_CPU)[2:].zfill(4)
+            for port in range(max_port):
+                eeprom_sysfs_path = self.get_eeprom_sysfs(dev_type, port)
+                bus_path = self.get_bus_path(dev_type, port)
 
-            if os.path.exists(cpu_eeprom_sysfs_path):
+                if eeprom_sysfs_path == "":
+                    self.logger.error("[_create_eeprom_sysfs] create sysfs failed, dev_name={}, port={}".format(dev_name, port))
+                elif os.path.exists(eeprom_sysfs_path):
                 pass
             else:
-                with open(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.I2C_BUS_CPU_EEPROM) + "/new_device", "w") as f:
-                    f.write("mb_eeprom " + hex(self.I2C_ADDR_EEPROM_CPU))
+                    with open(bus_path + "/" + self.sysfs_util.OP_NEW_DEV, "w") as f:
+                        f.write("{} {}".format(driver_type, 
+                                               hex(i2c_addr)))
 
-            self.logger.debug("CPU EEPROM:" + cpu_eeprom_sysfs_path)
+                self.logger.info("{}[{}] EEPROM: {}".format(dev_name, str(port), eeprom_sysfs_path))
         except Exception as e:
-            self.logger.error("Register CPU EEPROM to sysfs fail, error: " + str(e))
+            self.logger.error("Register {} EEPROM to sysfs fail, error: ".format(dev_name,  str(e)))
             raise
 
-    def _create_qsfp_eeprom_sysfs(self):
+    def get_eeprom_sysfs(self, dev_type, port=-1):        
+        i2c_addr = self.I2C_ADDR_EEPROM[dev_type]        
+        dev_name = self.DEV_NAME[dev_type]
+        fn_bus_num = None
+        bus_num = -1
+        
+        if dev_type == self.DEV_TYPE_CPU:
+            fn_bus_num = None
+            bus_num = self.I2C_BUS_CPU_EEPROM
+        elif dev_type == self.DEV_TYPE_QSFP:
+            fn_bus_num = self._get_qsfp_bus_num
+            bus_num = fn_bus_num(port)
+        elif dev_type == self.DEV_TYPE_QSFPDD:
+            fn_bus_num = self._get_qsfpdd_bus_num
+            bus_num = fn_bus_num(port)
+        else:
+            self.logger.error("invalid dev_type {}".format(dev_type))
+            return ""
+                                  
         try:
-            for port in range(QSFP.MAX_PORT):
-                bus_num = self._get_qsfp_bus_num(port)
+            eeprom_sysfs_path = self.sysfs_util.get_sysfs_path(bus_num, i2c_addr)
 
-                qsfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                        str(bus_num) + "-" + \
-                                        hex(self.I2C_ADDR_EEPROM_QSFP)[2:].zfill(4)
-
-                if os.path.exists(qsfp_eeprom_sysfs_path):
-                    pass
-                else:
-                    with open(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(bus_num) + "/new_device", "w") as f:
-                        f.write("sff8436 " + hex(self.I2C_ADDR_EEPROM_QSFP))
-
-                self.logger.debug("QSFP(" + str(port) + ") EEPROM:" + qsfp_eeprom_sysfs_path)
+            return eeprom_sysfs_path
         except Exception as e:
-            self.logger.error("Register QSFP EEPROM to sysfs fail, error: " + str(e))
+            self.logger.error("[_get_eeprom_sysfs] failed, error: ".format(dev_name,  str(e)))
+            raise
+    
+    def get_bus_path(self, dev_type, port=-1):
+        dev_name = self.DEV_NAME[dev_type]
+        fn_bus_num = None
+        bus_num = -1
+
+        if dev_type == self.DEV_TYPE_CPU:
+            fn_bus_num = None
+            bus_num = self.I2C_BUS_CPU_EEPROM
+        elif dev_type == self.DEV_TYPE_QSFP:
+            fn_bus_num = self._get_qsfp_bus_num
+            bus_num = fn_bus_num(port)
+        elif dev_type == self.DEV_TYPE_QSFPDD:
+            fn_bus_num = self._get_qsfpdd_bus_num
+            bus_num = fn_bus_num(port)
+                else:
+            self.logger.error("invalid dev_type {}".format(dev_type))
+            return ""
+                                  
+        try:                
+            bus_path = self.sysfs_util.get_bus_path(bus_num)
+
+            return bus_path
+        except Exception as e:
+            self.logger.error("[get_bus_path] failed, error: ".format(dev_name,  str(e)))
             raise
 
-    def _create_qsfpdd_eeprom_sysfs(self):
+    def dump_sysfs(self):
+        sysfs_dict = {}
+
         try:
-            for port in range(QSFPDD.MAX_PORT):
-                bus_num = self._get_qsfpdd_bus_num(port)
+            for dev_type in range(self.DEV_TYPE_MAX):                
+                max_port = self.MAX_NUM[dev_type]
+                sysfs_dict[self.DEV_NAME[dev_type]] = {}
 
-                qsfpdd_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                        str(bus_num) + "-" + \
-                                        hex(self.I2C_ADDR_EEPROM_QSFPDD)[2:].zfill(4)
+                for port in range(max_port):                                
+                    eeprom_sysfs_path = self.get_eeprom_sysfs(dev_type, port)                    
+                    sysfs_dict[self.DEV_NAME[dev_type]][port] = eeprom_sysfs_path
 
-                if os.path.exists(qsfpdd_eeprom_sysfs_path):
-                    pass
-                else:
-                    with open(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(bus_num) + "/new_device", "w") as f:
-                        f.write("optoe3 " + hex(self.I2C_ADDR_EEPROM_QSFPDD))
+            return sysfs_dict
 
-                self.logger.debug("QSFPDD(" + str(port) + ") EEPROM:" + qsfpdd_eeprom_sysfs_path)
         except Exception as e:
-            self.logger.error("Register QSFPDD EEPROM to sysfs fail, error: " + str(e))
+            self.logger.error("dump_sysfs() failed, error: {}".format(e))
             raise
 
+    def _create_cpu_eeprom_sysfs(self):
+        self._create_eeprom_sysfs(self.DEV_TYPE_CPU)
+
+    def _create_qsfp_eeprom_sysfs(self):        
+        self._create_eeprom_sysfs(self.DEV_TYPE_QSFP)
+
+    def _create_qsfpdd_eeprom_sysfs(self):        
+        self._create_eeprom_sysfs(self.DEV_TYPE_QSFPDD)
+    
     def _read_page(self, eeprom_sysfs, skip_page):
         page_data = subprocess.getoutput(self.EEPROM_CMD["READ_BLK"].format(eeprom_sysfs, skip_page))
 
@@ -233,60 +297,32 @@ class EEPRom:
             val = val - (1 << bits)        # compute negative value
         return val                         # return positive value as is
 
-    # def _create_sfp_eeprom_sysfs(self):
-        # try:
-            # for port in range(2):
-                # if port == 0:
-                    # bus_num = self.i2c_mux.MUXs["9548_ROOT_SFP_CPLD"].ch_bus[0]
-                # else:
-                    # bus_num = self.i2c_mux.MUXs["9548_ROOT_SFP_CPLD"].ch_bus[1]
-
-                # sfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                         # str(bus_num) + "-" + \
-                                         # hex(self.I2C_ADDR_EEPROM_SFP)[2:].zfill(4)
-
-                # if os.path.exists(sfp_eeprom_sysfs_path):
-                    # pass
-                # else:
-                    # with open(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(bus_num) + "/new_device", "w") as f:
-                        # f.write("optoe2 " + hex(self.I2C_ADDR_EEPROM_SFP))
-
-                # self.logger.debug("SFP+(" + str(port) + ") EEPROM:" + sfp_eeprom_sysfs_path)
-        # except Exception as e:
-            # self.logger.error("Register SFP+ EEPROM to sysfs fail, error: " + str(e))
-            # raise
-
     def init(self):
+        #CPU EEPROM
         try:
             self._create_cpu_eeprom_sysfs()
         except Exception as e:
             self.logger.error("Init CPU EEPROM fail, error: " + str(e))
             raise
 
+        #QSFP_EEPROM
         try:
             self._create_qsfp_eeprom_sysfs()
         except Exception as e:
             self.logger.error("Init QSFP port EEPROM fail, error: " + str(e))
             raise
 
+        #QSFPDD_EEPROM
         try:
             self._create_qsfpdd_eeprom_sysfs()
         except Exception as e:
             self.logger.error("Init QSFPDD port EEPROM fail, error: " + str(e))
             raise
 
-        # try:
-            # self._create_sfp_eeprom_sysfs()
-        # except Exception as e:
-            # self.logger.error("Init SFP+ port EEPROM fail, error: " + str(e))
-            # raise
-
     def dump_cpu_eeprom(self):
         try:
-            cpu_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(self.I2C_BUS_CPU_EEPROM) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_CPU)[2:].zfill(4)
-
+            cpu_eeprom_sysfs_path = self.sysfs_util.get_sysfs_path(self.I2C_BUS_CPU_EEPROM, 
+                                                           self.I2C_ADDR_EEPROM[self.DEV_TYPE_CPU])
             if os.path.exists(cpu_eeprom_sysfs_path):
                 with open(cpu_eeprom_sysfs_path + "/eeprom", "rb") as f:
                     content = f.read()
@@ -301,12 +337,10 @@ class EEPRom:
     def dump_qsfp_eeprom(self, port_num):
         try:
             bus_num = self._get_qsfp_bus_num(port_num)
-            qsfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(bus_num) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_QSFP)[2:].zfill(4)
+            sysfs_path = self.sysfs_util.get_sysfs_path(bus_num, self.I2C_ADDR_EEPROM[self.DEV_TYPE_QSFP])
 
-            if os.path.exists(qsfp_eeprom_sysfs_path):
-                with open(qsfp_eeprom_sysfs_path + "/eeprom", "rb") as f:
+            if os.path.exists(sysfs_path):
+                with open(sysfs_path + "/eeprom", "rb") as f:
                     content = f.read()
 
                 return content
@@ -319,9 +353,7 @@ class EEPRom:
     def dump_qsfpdd_eeprom(self, port_num):
         try:
             bus_num = self._get_qsfpdd_bus_num(port_num)
-            qsfpdd_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(bus_num) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_QSFPDD)[2:].zfill(4)
+            qsfpdd_eeprom_sysfs_path = self.sysfs_util.get_sysfs_path(bus_num, self.I2C_ADDR_EEPROM[self.DEV_TYPE_QSFPDD])
 
             if os.path.exists(qsfpdd_eeprom_sysfs_path):
                 with open(qsfpdd_eeprom_sysfs_path + "/eeprom", "rb") as f:
@@ -341,9 +373,7 @@ class EEPRom:
             eeprom_pages = [0] * self.QSFPReg["PAGE_SIZE"]
 
             bus_num = self._get_qsfp_bus_num(port_num)
-            qsfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(bus_num) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_QSFP)[2:].zfill(4) + \
+            qsfp_eeprom_sysfs_path = self.sysfs_util.get_sysfs_path(bus_num, self.I2C_ADDR_EEPROM[self.DEV_TYPE_QSFP]) + \
                                     "/eeprom"
 
             if os.path.exists(qsfp_eeprom_sysfs_path):
@@ -410,9 +440,8 @@ class EEPRom:
             else:
                 self.logger.error("QSFP port(" + str(port_num) + ") EEPROM is not registered in sysfs")
 
-
         except Exception as e:
-            self.logger.error("Dump QSFP port(" + str(port_num) + ") EEPROM fail, sysfs path=" + qsfp_eeprom_sysfs_path + " error: " + str(e))
+            self.logger.error("Get QSFP port(" + str(port_num) + ") EEPROM fail, sysfs path=" + qsfp_eeprom_sysfs_path + " error: " + str(e))
             raise
         
     def get_qsfpdd_info(self, port_num):
@@ -423,9 +452,7 @@ class EEPRom:
             eeprom_pages = [0] * self.QSFPDDReg["PAGE_SIZE"]
 
             bus_num = self._get_qsfpdd_bus_num(port_num)
-            qsfpdd_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                    str(bus_num) + "-" + \
-                                    hex(self.I2C_ADDR_EEPROM_QSFPDD)[2:].zfill(4) + \
+            qsfpdd_eeprom_sysfs_path = self.sysfs_util.get_sysfs_path(bus_num, self.I2C_ADDR_EEPROM[self.DEV_TYPE_QSFPDD]) + \
                                     "/eeprom"
 
             if os.path.exists(qsfpdd_eeprom_sysfs_path):
@@ -512,27 +539,6 @@ class EEPRom:
                 self.logger.error("QSFPDD port(" + str(port_num) + ") EEPROM is not registered in sysfs")
 
         except Exception as e:
-            self.logger.error("Dump QSFPDD port(" + str(port_num) + ") EEPROM fail, sysfs path=" + qsfpdd_eeprom_sysfs_path + " error: " + str(e))
+            self.logger.error("Get QSFPDD port(" + str(port_num) + ") EEPROM fail, sysfs path=" + qsfpdd_eeprom_sysfs_path + " error: " + str(e))
             raise
-        
-    # def dump_sfp_eeprom(self, port_num):
-        # try:
-            # if port_num == 0:
-                # sfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                         # str(self.i2c_mux.MUXs["9548_ROOT_SFP_CPLD"].ch_bus[0]) + "-" + \
-                                         # hex(self.I2C_ADDR_EEPROM_SFP)[2:].zfill(4)
-            # else:
-                # sfp_eeprom_sysfs_path = self.PATH_SYS_I2C_DEVICES + "/" + \
-                                         # str(self.i2c_mux.MUXs["9548_ROOT_SFP_CPLD"].ch_bus[1]) + "-" + \
-                                         # hex(self.I2C_ADDR_EEPROM_SFP)[2:].zfill(4)
 
-            # if os.path.exists(sfp_eeprom_sysfs_path):
-                # with open(sfp_eeprom_sysfs_path + "/eeprom", "rb") as f:
-                    # content = f.read()
-
-                # return content
-            # else:
-                # self.logger.error("SFP+ port(" + str(port_num) + ") EEPROM is not registered in sysfs")
-        # except Exception as e:
-            # self.logger.error("Dump SFP+ port(" + str(port_num) + ") EEPROM fail, error: " + str(e))
-            # raise

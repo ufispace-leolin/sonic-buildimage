@@ -20,7 +20,7 @@ import sys
 from time import sleep
 
 from bsp.common.logger import Logger
-from bsp.const.const import DataType
+from bsp.const.const import DataType, ResetStatus
 from bsp.const.const import LPMode
 from bsp.const.const import PSU
 from bsp.const.const import SFP
@@ -32,44 +32,15 @@ from bsp.const.const import DevType
 from bsp.protocol.i2c import I2C, I2C_Dev
 from bsp.protocol.lpc import LPC
 from bsp.protocol.lpc import LPCDevType
-
-class CPLDCPUReg(object):
-    REG_CPLD_REVISION = 0x00
-    REG_RESET_CTRL = 0x03
+from bsp.utility.sysfs_utility import SysfsUtility
+from bsp.cpld.cpld_reg import CPLDCPUReg
+from bsp.utility.board_id_utility import BrdIDUtility
 
 class CPLD:
 
-    EXT_BOARD_ID = 0b1110
-    
-    BOARD_ID_MAP = {0b0000: "Apache phase1",
-                    0b0001: "Apache phase2",
-                    0b0010: "Apollo NCP1-1 40+13P",
-                    0b0011: "Apollo NCP1-2",
-                    0b0100: "Apollo NCP2-1 10+13P",
-                    0b0101: "Apollo NCP2-2",
-                    0b0110: "Apollo NCP3",
-                    0b0111: "Apollo NCF 48P",
-                    0b1000: "EMUX",
-                    0b1110: "Extended board ID"}    
-
-    EXT_BOARD_ID_MAP = {}
-
-    HARDWARE_REV_MAP = {0b00: "Proto",
-                        0b01: "Alpha",
-                        0b10: "Beta",
-                        0b11: "PVT"}
-
-    BUILD_REV_MAP = {0b00: "A1",
-                     0b01: "A2",
-                     0b10: "A3",
-                     0b11: "A4"}    
-    
     CPLD_I2C_BUS = 1
     CPLD_I2C_ADDR = [0x30, 0x39, 0x3A, 0x3B, 0x3C]
     
-    CPLD_MODEL_ID_BIT = 0b11110000
-    CPLD_HW_REV_BIT = 0b00001100
-    CPLD_BUILD_REV_BIT = 0b00000011
     CPLD_PORT_INT_BIT = 0b00000001
     CPLD_GBOX_INT_BIT = 0b00000010
     CPLD_PORT_PRE_BIT = 0b00001000
@@ -107,6 +78,9 @@ class CPLD:
     CPLD_GBX_RESET_BIT = 0b00100000
     CPLD_J2_RESET_BIT = 0b01000000    
     CPLD_RETIMER_RESET_BIT = 0b00000001
+    CPLD_OP2_CRST_RESET_BIT  = 0b00000001
+    CPLD_OP2_PERST_RESET_BIT = 0b00000010
+    CPLD_OP2_SRST_RESET_BIT  = 0b00000100
     
     CPLD_J2_ROV_BIT = 0b00001110
     
@@ -130,16 +104,20 @@ class CPLD:
     ATTR_CPLD_RESET_CTRL = "cpld_reset_control"
     ATTR_CPLD_RESET_MAC = "cpld_reset_mac"
     ATTR_CPLD_RESET_RETIMER = "cpld_reset_retimer"
+    ATTR_CPLD_RESET_MAC_2 = "cpld_reset_mac_2"    
     ATTR_CPLD_GBOX_INTR = "cpld_gbox_intr"
     ATTR_CPLD_RETIMER_INTR = "cpld_retimer_intr"
     
-    PATH_SYS_I2C_DEVICES = "/sys/bus/i2c/devices"      
+    DEV_NAME = "s9700_53dx_cpld"
+    DRIVER_NAME = "x86_64_ufispace_s9700_53dx_cpld"
 
     def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()        
         self.i2c = I2C()
         self.lpc = LPC()
+        self.sysfs_util = SysfsUtility()
+        self.brd_id_util = BrdIDUtility()
         
         # init i2c devices for CPLD
         self.i2c_dev = []
@@ -150,21 +128,15 @@ class CPLD:
         try:
             for cpld_index in range(CPLDConst.CPLD_MAX):
                  
-                sysfs_path = "{0}/{1}-{2}".format(
-                    self.PATH_SYS_I2C_DEVICES,
-                    self.CPLD_I2C_BUS,
-                    "{:04x}".format(self.i2c_dev[cpld_index].addr))
-                 
-                sysfs_new_dev_path = "{0}/i2c-{1}/new_device".format(
-                    self.PATH_SYS_I2C_DEVICES,
-                    self.i2c_dev[cpld_index].bus)
+                sysfs_path = self.sysfs_util.get_sysfs_path(self.CPLD_I2C_BUS, self.i2c_dev[cpld_index].addr) 
+                sysfs_new_dev_path = self.sysfs_util.get_new_dev_path(self.i2c_dev[cpld_index].bus)
                  
                 if not os.path.exists(sysfs_path):
                     with open(sysfs_new_dev_path, "w") as f:
-                        f.write("apollo_cpld{0} {1}".format(cpld_index + 1, self.i2c_dev[cpld_index].addr))
+                        f.write("{}{} {}".format(self.DEV_NAME, cpld_index + 1, self.i2c_dev[cpld_index].addr))
                 else:
-                    self.logger.error("sysfs_path already exist: {0}".format(sysfs_path))
-                    return 0
+                    self.logger.warning("sysfs_path already exist: {0}".format(sysfs_path))
+                    continue
         except IOError as e:
             self.logger.error("I/O error({0}): {1}".format(e.errno, e.strerror))        
         except:
@@ -175,21 +147,13 @@ class CPLD:
         try:
             for cpld_index in range(CPLDConst.CPLD_MAX):
                  
-                sysfs_path = "{0}/{1}-{2}".format(
-                    self.PATH_SYS_I2C_DEVICES,
-                    self.CPLD_I2C_BUS,
-                    "{:04x}".format(self.i2c_dev[cpld_index].addr))
-                 
-                sysfs_del_dev_path = "{0}/i2c-{1}/delete_device".format(
-                    self.PATH_SYS_I2C_DEVICES,
-                    self.i2c_dev[cpld_index].bus)
+                sysfs_path = self.sysfs_util.get_sysfs_path(self.CPLD_I2C_BUS, self.i2c_dev[cpld_index].addr)
+                sysfs_del_dev_path = self.sysfs_util.get_del_dev_path(self.i2c_dev[cpld_index].bus)
                  
                 if os.path.exists(sysfs_path):
                     with open(sysfs_del_dev_path, "w") as f:
-                        f.write("{0}".format(self.i2c_dev[cpld_index].addr))
-                else:
-                    self.logger.error("sysfs_path does not exist: {0}".format(sysfs_path))
-                    return 0
+                        f.write("{}".format(self.i2c_dev[cpld_index].addr))
+            return
         except IOError as e:
             self.logger.error("I/O error({0}): {1}".format(e.errno, e.strerror))        
         except:
@@ -197,11 +161,7 @@ class CPLD:
             raise
 
     def _get_sysfs_path(self, cpld_index, cpld_attr, cpld_port_index=-1):
-        sysfs_path = "{0}/{1}-{2}/{3}".format(
-            self.PATH_SYS_I2C_DEVICES,
-            self.CPLD_I2C_BUS,
-            "{:04x}".format(self.i2c_dev[cpld_index].addr),
-            cpld_attr)
+        sysfs_path = self.sysfs_util.get_sysfs_path(self.CPLD_I2C_BUS, self.i2c_dev[cpld_index].addr, cpld_attr)
         
         if cpld_port_index != -1:
             sysfs_path = sysfs_path + "_" + str(cpld_port_index)
@@ -235,8 +195,11 @@ class CPLD:
             if os.path.exists(sysfs_path):
                 with open(sysfs_path, "w") as f:
                     f.write(str(reg_val))
+                    return True
             else:
-                raise IOError("sysfs_path does not exist: {0}".format(sysfs_path))
+                self.logger.error("sysfs_path does not exist: {0}".format(sysfs_path))
+                
+            return False
         except Exception as e:
             self.logger.error(e)
             raise
@@ -251,7 +214,7 @@ class CPLD:
     # write cpld reg via sysfs
     def _write_cpld_reg(self, cpld_index, cpld_attr, reg_val, cpld_port_index=-1):
         sysfs_path = self._get_sysfs_path(cpld_index, cpld_attr, cpld_port_index)
-        self._write_sysfs(sysfs_path, reg_val)    
+        return self._write_sysfs(sysfs_path, reg_val)    
     
     # get bit shift from mask
     def _get_shift(self, reg_mask):
@@ -273,42 +236,19 @@ class CPLD:
         try:
             # read board_id reg
             cpld_attr = self.ATTR_CPLD_BOARD_TYPE
-            brd_reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
+            reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
             
-            board_id = (brd_reg_val & self.CPLD_MODEL_ID_BIT) >> self._get_shift(self.CPLD_MODEL_ID_BIT)
-            hw_rev = (brd_reg_val & self.CPLD_HW_REV_BIT) >> self._get_shift(self.CPLD_HW_REV_BIT)
-            build_rev = (brd_reg_val & self.CPLD_BUILD_REV_BIT) >> self._get_shift(self.CPLD_BUILD_REV_BIT)
-            
-            # read ext_board_id reg
-            cpld_attr = self.ATTR_CPLD_EXT_BOARD_TYPE
-            ext_brd_reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
-            
-            ext_board_id = (ext_brd_reg_val & self.CPLD_MODEL_ID_BIT) >> self._get_shift(self.CPLD_MODEL_ID_BIT)                       
-            
-            # board_id and board_id_str
-            if board_id == self.EXT_BOARD_ID:
-                if int(ext_board_id) in self.EXT_BOARD_ID_MAP.keys():
-                    board_id_str = self.EXT_BOARD_ID_MAP[int(ext_board_id)]                    
-                else:
-                    board_id_str = "unknown"    
-                board_id = ext_board_id
-            else:
-                if int(board_id) in self.BOARD_ID_MAP.keys():
-                    board_id_str = self.BOARD_ID_MAP[int(board_id)]
-                else:
-                    board_id_str = "unknown"            
+            #board id
+            board_id = self.brd_id_util.get_model_id(reg_val)
+            board_id_str = self.brd_id_util.get_model_id_str(board_id)
              
-            # hw_rev and hw_rev_str   
-            if hw_rev in self.HARDWARE_REV_MAP.keys():
-                hw_rev_str = self.HARDWARE_REV_MAP[hw_rev]
-            else:
-                hw_rev_str = "unknown" 
+            #hw_rev
+            hw_rev = self.brd_id_util.get_hw_rev(reg_val)
+            hw_rev_str = self.brd_id_util.get_hw_rev_str(hw_rev)
             
-            # build_rev and 
-            if build_rev in self.BUILD_REV_MAP.keys():
-                build_rev_str = self.BUILD_REV_MAP[build_rev]
-            else:
-                build_rev_str = "unknown"
+            #build_rev
+            build_rev = self.brd_id_util.get_build_rev(reg_val)
+            build_rev_str = self.brd_id_util.get_build_rev_str(build_rev)
                             
             return {"board_id": board_id,
                     "board_id_str": board_id_str,
@@ -446,7 +386,7 @@ class CPLD:
         else:
             reg_val &= ~mask
         
-        self._write_cpld_reg(cpld_index, cpld_attr, reg_val)
+        return self._write_cpld_reg(cpld_index, cpld_attr, reg_val)
     
     def sfp_get_rx_los(self, port_num):
         cpld_index = CPLDConst.CPLD_1     
@@ -512,7 +452,7 @@ class CPLD:
         phy_port = self._qsfp_port_fp2phy(port_num)
         cpld_var = self._qsfp_cpld_var_set(phy_port)               
                         
-        self._write_cpld_reg(cpld_var["cpld_index"],
+        return self._write_cpld_reg(cpld_var["cpld_index"],
                             cpld_attr,
                             reg_val,
                             cpld_var["cpld_port_index"])
@@ -842,12 +782,23 @@ class CPLD:
         
         return presence
 
+    ########## FOR RESET ##########
+
     def reset_dev(self, devType):
         cpld_index = CPLDConst.CPLD_1;     
         
         if devType == DevType.J2:
             cpld_attr = self.ATTR_CPLD_RESET_MAC           
             mask = self.CPLD_J2_RESET_BIT
+        elif devType == DevType.OP2_CRST:
+            cpld_attr = self.ATTR_CPLD_RESET_MAC            
+            mask = self.CPLD_OP2_CRST_RESET_BIT
+        elif devType == DevType.OP2_PERST:
+            cpld_attr = self.ATTR_CPLD_RESET_MAC            
+            mask = self.CPLD_OP2_PERST_RESET_BIT
+        elif devType == DevType.OP2_SRST:
+            cpld_attr = self.ATTR_CPLD_RESET_MAC            
+            mask = self.CPLD_OP2_SRST_RESET_BIT
         elif devType == DevType.GEARBOX:
             cpld_attr = self.ATTR_CPLD_RESET_MAC
             mask = self.CPLD_GBX_RESET_BIT
@@ -891,7 +842,102 @@ class CPLD:
                                 cpld_attr,
                                 reg_val)
             
+    def get_reset_ctrl(self, devType):        
+        cpld_index = CPLDConst.CPLD_1;     
+        cpld_attr = self.ATTR_CPLD_RESET_MAC_2
+        ret = 0
+        
+        if devType == DevType.J2:                       
+            mask = self.CPLD_J2_RESET_BIT
+        elif devType == DevType.OP2_CRST:            
+            mask = self.CPLD_OP2_CRST_RESET_BIT
+        elif devType == DevType.OP2_PERST:            
+            mask = self.CPLD_OP2_PERST_RESET_BIT
+        elif devType == DevType.OP2_SRST:            
+            mask = self.CPLD_OP2_SRST_RESET_BIT                   
+        else:
+            return -1        
+        
+        board_info = self.get_board_info()
+        
+        # proto
+        if board_info["hw_rev"] < 2:
+            return -1
+        else:  # alpha and later               
+            reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
+            ret = (reg_val & mask) >> self._get_shift(mask)
+            
+        return ret
+    
+    def set_reset_ctrl(self, devType, reset_status):        
+        cpld_index = CPLDConst.CPLD_1;     
+        cpld_attr = self.ATTR_CPLD_RESET_MAC_2
+        
+        if devType == DevType.J2:                       
+            mask = self.CPLD_J2_RESET_BIT
+        elif devType == DevType.OP2_CRST:            
+            mask = self.CPLD_OP2_CRST_RESET_BIT
+        elif devType == DevType.OP2_PERST:            
+            mask = self.CPLD_OP2_PERST_RESET_BIT
+        elif devType == DevType.OP2_SRST:            
+            mask = self.CPLD_OP2_SRST_RESET_BIT                   
+        else:
+            return False        
+        
+        board_info = self.get_board_info()
+        
+        # proto
+        if board_info["hw_rev"] < 2:
+            return False
+        else:  # alpha and later               
+            reg_val = self._read_cpld_reg(cpld_index, cpld_attr)
+            
+            if reset_status == ResetStatus.RESET:                
+                # pull low the bit
+                reg_val &= ~mask
+            else:
+                # pull high the bit
+                reg_val |= mask
+                             
+            return self._write_cpld_reg(cpld_index,
+                                cpld_attr,
+                                reg_val)
+
     ########## FOR System LED ##########
+    def get_sys_led(self, target):
+        cpld_attr = self.ATTR_CPLD_SYSTEM_LED       
+        cpld_index = CPLDConst.CPLD_1
+        reg_index = 0
+        attr_index = 0
+        mask = 0
+        reg_shift = 0
+        
+        if target == Led.FAN:
+            attr_index = 0
+            reg_index = 0            
+        elif target == Led.SYSTEM:
+            attr_index = 0
+            reg_index = 1
+        elif target == Led.PSU0:            
+            attr_index = 1
+            reg_index = 0    
+        elif target == Led.PSU1:            
+            attr_index = 1
+            reg_index = 1
+        else:
+            raise ValueError("LED target is out of range, target is {}".format(target))
+                        
+        reg_val = self._read_cpld_reg(cpld_index, cpld_attr, attr_index)
+        
+        if reg_index % 2 == 0:
+            reg_shift = 0
+            mask = 0b00001111
+        else:
+            reg_shift = 4
+            mask = 0b11110000
+       
+        return (reg_val & mask) >> reg_shift
+
     def set_sys_led(self, target, color, blink):
         cpld_attr = self.ATTR_CPLD_SYSTEM_LED       
         cpld_index = CPLDConst.CPLD_1
@@ -926,20 +972,6 @@ class CPLD:
         reg_val &= mask
         
         # set color  
-        '''
-        if color == Led.COLOR_GREEN:
-            if target == Led.SYSTEM:
-                reg_val &= ~(Led.MASK_COLOR << reg_shift)
-            else:
-                reg_val |= (Led.MASK_COLOR << reg_shift)
-            reg_val |= (Led.MASK_ONOFF << reg_shift)
-        elif color == Led.COLOR_YELLOW:
-            if target == Led.SYSTEM:
-                reg_val |= (Led.MASK_COLOR << reg_shift)
-            else:
-                reg_val &= ~(Led.MASK_COLOR << reg_shift)
-            reg_val |= (Led.MASK_ONOFF << reg_shift)
-        '''    
         if color == Led.COLOR_GREEN:
             reg_val |= (Led.MASK_COLOR << reg_shift)
             reg_val |= (Led.MASK_ONOFF << reg_shift)

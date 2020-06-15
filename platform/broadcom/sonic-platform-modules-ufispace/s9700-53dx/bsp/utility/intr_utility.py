@@ -34,10 +34,14 @@ class INTRUtility:
         self.lpc = LPC()
         self.ioexp = IOExpander()
         
+        #GPIO REGs
+        self.ALERT_GPIO_REG = 0x1
+        #I2C Alert REGs
+        self.ALERT_STATUS_REG = 0x0
+        self.ALERT_DIS_REG = 0x11
+        
     def init_i2c_alert(self):
         i2c_detect_cmd = "i2cdetect -y 0"
-        i2c_alert_pin_reg =  0x1
-        i2c_alert_fn_reg = 0x11
         
         #i2cdetect -y 0
         retcode, _ = subprocess.getstatusoutput(i2c_detect_cmd)
@@ -46,17 +50,49 @@ class INTRUtility:
             
         #Set pin function to alert mode on CPU
         #./ioset 0x501 0xf7
+        #IO_x500[11]  SMBALERT_N_GPIO11
+        #0/Alert mode,1/GPIO mode
+        #Default is 0
+        regVal = self.lpc.regGet(LPCDevType.BDE_GPIO_ON_CPU_BOARD,
+                        self.ALERT_GPIO_REG)
         self.lpc.regSet(LPCDevType.BDE_GPIO_ON_CPU_BOARD,
-                        i2c_alert_pin_reg,
-                        0xf7)
+                        self.ALERT_GPIO_REG,
+                        regVal & 0xF7)
+        
         #Enable alert function on CPU
         #./ioset 0xf011 0x0
+        #IO_xF011[2]  SMBALERT_DIS
+        #0/Enable Alert, 1/Disable alert
+        #Default is 1
+        regVal = self.lpc.regGet(LPCDevType.CPU_I2C_ALERT,
+                        self.ALERT_DIS_REG)       
         self.lpc.regSet(LPCDevType.CPU_I2C_ALERT,
-                        i2c_alert_fn_reg,
-                        0x0)
+                        self.ALERT_DIS_REG,
+                        regVal & 0xFB)
+    
+    def deinit_i2c_alert(self):
+        regVal = self.lpc.regGet(LPCDevType.CPU_I2C_ALERT,
+                        self.ALERT_DIS_REG)        
+        self.lpc.regSet(LPCDevType.CPU_I2C_ALERT,
+                        self.ALERT_DIS_REG,
+                        regVal | 0x04)
+    
+    def get_alert_gpio(self):
+        regVal = self.lpc.regGet(LPCDevType.BDE_GPIO_ON_CPU_BOARD,
+                        self.ALERT_GPIO_REG)        
+        return (regVal >> 3) & 1
+    
+    def get_alert_dis(self):
+        regVal = self.lpc.regGet(LPCDevType.CPU_I2C_ALERT,
+                        self.ALERT_DIS_REG)        
+        return (regVal >> 2) & 1
+    
+    def get_alert_sts(self):
+        regVal = self.lpc.regGet(LPCDevType.CPU_I2C_ALERT,
+                        self.ALERT_STATUS_REG)        
+        return (regVal >> 5) & 1
     
     def clear_i2c_alert(self):
-        i2c_alert_status_reg = 0x0
         intr_reg = "9539_HOST_GPIO_I2C"
         cpu_gpio_reg = "9539_CPU_I2C"
         
@@ -72,11 +108,11 @@ class INTRUtility:
         #clear i2c alert status on CPU
         #./ioset 0xf000 0x60
         self.lpc.regSet(LPCDevType.CPU_I2C_ALERT,
-                        i2c_alert_status_reg,
+                        self.ALERT_STATUS_REG,
                         0x60)
         
     def get_cpld_to_cpu_intr(self):
-        cpld_intr_name = ["cpld_1_2", "cpld_3", "cpld_4", "cpld_5"]
+        cpld_intr_name = ["op2", "cpld_1_2", "cpld_3", "cpld_4", "cpld_5", "j2"]
         cpld_intr = {}
         try:
             cpld_intr_val = self.ioexp.get_cpld_to_cpu_intr()

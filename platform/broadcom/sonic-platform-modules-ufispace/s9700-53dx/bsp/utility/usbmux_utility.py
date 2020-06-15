@@ -18,6 +18,7 @@
 from bsp.common.logger import Logger
 from bsp.gpio.ioexp import IOExpander
 from bsp.const.const import USBMux, BID
+from bsp.utility.board_id_utility import BrdIDUtility
 
 class USBMuxUtility:
 
@@ -25,7 +26,8 @@ class USBMuxUtility:
         log = Logger(__name__)
         self.logger = log.getLogger()
         self.ioexp = IOExpander()        
-        self.board_id = self.ioexp.preinit_get_board_id()
+        self.brd_id_util = BrdIDUtility()
+        self.board_id = self.brd_id_util.get_board_id()
         
     def set_usb_mux(self, source):
         try:
@@ -36,4 +38,4 @@ class USBMuxUtility:
             
             self.ioexp.set_usb_mux(source)
         except Exception as e:
-            print("set_usb_mux {0} failed, error: {1}".format(source, e))
+            self.logger.error("set_usb_mux {0} failed, error: {1}".format(source, e))

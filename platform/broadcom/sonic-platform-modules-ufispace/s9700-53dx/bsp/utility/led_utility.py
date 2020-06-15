@@ -53,6 +53,35 @@ class LEDUtility:
         if beacon_num not in range(Led.BEACON_MAX+1):                
             raise ValueError("Beacon number({0}) is out of range (0-{1})".format(beacon_num, Led.BEACON_MAX))
                     
+    def get_sys_led(self, target):
+        result = {"color": "", "blink": "", "onoff": ""}
+        try:
+            
+            color, blink, onoff = self.sys_led.get_sys_led(target)
+            
+            if color == 1:
+                result["color"] = "GREEN"
+            else:
+                result["color"] = "YELLOW"
+                
+            if blink == 1:
+                result["blink"] = "Blinking"
+            else:
+                result["blink"] = "Solid"
+            
+            if onoff == 1:
+                result["onoff"] = "ON"
+            else:
+                #clear other fileds if led is off
+                result["color"] = ""
+                result["blink"] = ""
+                result["onoff"] = "OFF"
+                    
+            return result
+            
+        except Exception as e:
+            self.logger.error("get_sys_led failed, error: {}".format(e))
+                    
     def set_sys_led(self, target, color, blink=-1):
         try:
             self._check_sys_led(target)
@@ -62,7 +91,7 @@ class LEDUtility:
                         
             self.sys_led.set_led(target, color, blink)
         except Exception as e:
-            print("set_sys_led failed, led={0}, color={1}, error: {2}".format(target, color, e))           
+            self.logger.error("set_sys_led failed, led={}, color={}, error: {}".format(target, color, e))
             
     def set_qsfpdd_led(self, port, color, blink):
         try:
@@ -72,7 +101,7 @@ class LEDUtility:
             
             self.cpld.set_qsfpdd_led(port, color, blink)
         except Exception as e:
-            print("set_qsfpdd_led failed, port={0}, color={1}, blink={2}, error: {3}".format(port, color, blink, e))
+            self.logger.error("set_qsfpdd_led failed, port={}, color={}, blink={}, error: {}".format(port, color, blink, e))
             
     def get_qsfpdd_led(self, port):
         result = {"color": "", "blink": ""}
@@ -100,7 +129,7 @@ class LEDUtility:
             return result
             
         except Exception as e:
-            print("set_qsfpdd_led failed, port={0}, color={1}, error: {2}".format(port, color, e))
+            self.logger.error("set_qsfpdd_led failed, port={}, color={}, error: {}".format(port, color, e))
             
     def set_beacon_led_num(self, beacon_num):
         try:
@@ -108,17 +137,17 @@ class LEDUtility:
                         
             self.beacon_led.set_beacon_num(beacon_num)            
         except Exception as e:
-            print("set_beacon_num failed, num={0}, error: {1}".format(beacon_num, e))
+            self.logger.error("set_beacon_num failed, num={}, error: {}".format(beacon_num, e))
 
     def ut_sysled(self):
         color_desc = ["Green", "Yellow", "Off"]         
         for i, color in enumerate([Led.COLOR_GREEN, Led.COLOR_YELLOW, Led.COLOR_OFF]):
-            print("[Sys LED] -- {0}".format(color_desc[i]))
+            self.logger.error("[Sys LED] -- {0}".format(color_desc[i]))
             for led in [Led.SYSTEM, Led.FAN, Led.PSU0, Led.PSU1]:                            
                 self.set_sys_led(led, color)
                 time.sleep(0.5)
   
-        print("[Sys LED] -- End")
+        self.logger.info("[Sys LED] -- End")
         
     def ut_qsfpdd_led(self):
         blink_desc = ["Solid", "Blinking"]
@@ -128,14 +157,14 @@ class LEDUtility:
             for j, color in enumerate([Led.COLOR_GREEN, Led.COLOR_RED, Led.COLOR_BLUE, Led.COLOR_OFF]):
                 if blink == Led.BLINK_STATUS_BLINKING and color == Led.COLOR_OFF :
                         continue
-                print("[QSFPDD LED] -- {0} {1}".format(blink_desc[i], color_desc[j]))
+                self.logger.error("[QSFPDD LED] -- {0} {1}".format(blink_desc[i], color_desc[j]))
                 for port in range(QSFPDD.MAX_PORT):   
                             
                     self.set_qsfpdd_led(port, color, blink)
                     time.sleep(1)
         
         time.sleep(1)
-        print("[QSFPDD LED] -- End")
+        self.logger.error("[QSFPDD LED] -- End")
         for port in range(QSFPDD.MAX_PORT):            
             self.set_qsfpdd_led(port, Led.COLOR_OFF, Led.BLINK_STATUS_SOLID)
 
@@ -144,8 +173,8 @@ class LEDUtility:
                                     0x11, 0x22, 0x33, 0x44, 0x55, 
                                     0x66, 0x77, 0x88, 0x99, 0xaa, 
                                     0xbb, 0xcc, 0xdd, 0xee, 0xff]):
-            print("[Beacon LED] -- {:02x}".format(beacon_num))
+            self.logger.error("[Beacon LED] -- {:02x}".format(beacon_num))
             self.set_beacon_led_num(beacon_num)
             time.sleep(0.5)
   
-        print("[Beacon LED] -- End")
+        self.logger.info("[Beacon LED] -- End")

@@ -26,12 +26,7 @@ class ROVUtility:
         self.logger = log.getLogger()
         self.cpld = CPLD()
         self.rov_controller = ROVController()
-    
-    def _vid_to_volt_str(self, vid):
-        volt = (vid - 1)*0.005 + 0.25
-        #return str
-        return "{0:.3f}V".format(volt)
-    
+   
     def platform_check(self):
         # NCP 1-1 beta (JR2 B1) and later
         #0x2[9abcdefABCDEF])        
@@ -44,7 +39,7 @@ class ROVUtility:
     def get_j2_rov(self):
         try:
             if not self.platform_check():
-                print("Not supported")                
+                self.logger.error("Not supported")                
                 return {}
             
             j2_rov_stamp = self.cpld.get_j2_rov_stamp()
@@ -52,21 +47,22 @@ class ROVUtility:
             rov_controller_output = self.rov_controller.get_rov_output()
             return {"j2_rov_stamp": j2_rov_stamp,
                     "rov_controller_config": "0x{:02X}".format(rov_controller_config),
-                    "rov_controller_config_volt": self._vid_to_volt_str(rov_controller_config),
+                    "rov_controller_config_volt": self.rov_controller._vid_to_volt_str(rov_controller_config),
                     "rov_controller_output": "0x{:02X}".format(rov_controller_output),
-                    "rov_controller_output_volt": self._vid_to_volt_str(rov_controller_output)
+                    "rov_controller_output_volt": self.rov_controller._vid_to_volt_str(rov_controller_output)
                     }
         except Exception as e:
-            print("get_j2_rov failed, error: {0}".format(e))
+            self.logger.error("get_j2_rov failed, error: {0}".format(e))
     
     def set_j2_rov(self):
         try:
             if not self.platform_check():
-                print("Not supported")                
+                self.logger.error("Not supported")   
                 return
             
             j2_rov_stamp = self.cpld.get_j2_rov_stamp()
             self.rov_controller.set_rov_config(j2_rov_stamp)
             
         except Exception as e:
-            print("set_j2_rov failed, error: {}".format(e))
+            self.logger.error("set_j2_rov failed, error: {}".format(e))
+            

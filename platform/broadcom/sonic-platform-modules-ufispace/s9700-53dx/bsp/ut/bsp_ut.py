@@ -38,8 +38,7 @@ from bsp.const.const import QSFP
 from bsp.const.const import QSFPDD
 from bsp.const.const import CPLDConst
 from bsp.const.const import Led
-from bsp.const.const import Gearbox
-from bsp.const.const import Retimer
+from bsp.gpio.ioexp import IOExpander
 
 def _group_to_range(group):
     group = ''.join(group.split())
@@ -63,7 +62,12 @@ def cpld_usage(cmd):
     print("    4: Get CPLD port interrupt status")
     print("       option1: CPLD number, 0-{0}".format(cpld_max))
     print("    5: Reset device")
-    print("       option1: 0 for J2, 1 for Gearbox, 2 for Retimer")
+    print("       option1: 0 for J2, 1 for Gearbox, 2 for Retimer, 6 for OP2_CRST, 7 for OP2_PERST, 8 for OP2_SRST")
+    print("    6: Get Reset control")
+    print("       option1: 0 for J2, 6 for OP2_CRST, 7 for OP2_PERST, 8 for OP2_SRST")
+    print("    7: Set Reset control")
+    print("       option1: 0 for J2, 6 for OP2_CRST, 7 for OP2_PERST, 8 for OP2_SRST")
+    print("       option2: 0 for RESET, 1 for NO_RESET")
     
 def ut_cpld(argv):
     try:
@@ -92,6 +96,18 @@ def ut_cpld(argv):
                 cpld_usage(argv[0])
             else:      
                 util.reset_dev(int(argv[3]))                    
+        elif argv[2] == '6':
+            if len(argv) < 4:
+                cpld_usage(argv[0])
+            else:
+                dev_list = _rangeexpand(argv[3])
+                for dev in dev_list:
+                    print("[" + str(dev) + "] " + json.dumps(util.get_reset_ctrl(int(dev)), sort_keys=False, indent=4))                  
+        elif argv[2] == '7':
+            if len(argv) < 5:
+                cpld_usage(argv[0])
+            else:
+                util.set_reset_ctrl(int(argv[3]), int(argv[4]))                
         else:
             cpld_usage(argv[0])
     except:
@@ -99,20 +115,18 @@ def ut_cpld(argv):
 
 def eeprom_usage(cmd):
     qsfpdd_max_port = QSFPDD.MAX_PORT - 1
-    qsfp_max_port = QSFP.MAX_PORT - 1
+    ports = QSFP.MAX_PORT - 1
     
     print("Usage: " + cmd + " EEPROM 1|2|3|help [option1]")
     print("    1: Dump EEPROM content from CPU")
     print("    2: Dump EEPROM content from specific QSFP port")
-    print("       option1: Port number, 0-{0}".format(qsfp_max_port))
+    print("       option1: Port number, 0-{0}".format(ports))
     print("    3: Dump EEPROM content from specific QSFPDD port")
     print("       option1: Port number, 0-{0}".format(qsfpdd_max_port))
     print("    4: Get EEPROM info from specific QSFP port")
-    print("       option1: Port number, 0-{0}".format(qsfp_max_port))
+    print("       option1: Port number, 0-{0}".format(ports))
     print("    5: Get EEPROM info from specific QSFPDD port")
     print("       option1: Port number, 0-{0}".format(qsfpdd_max_port))
-    # print("    4: Dump EEPROM content from specific SFP+ port")
-    # print("       option1: Port number, 0-1")
     print("    6: Get EEPROM i2c bus num from specific QSFP port")
     print("       option1: Port number, 0-{0}".format(qsfp_max_port))
     print("    7: Get EEPROM i2c bus num from specific QSFPDD port")
@@ -144,8 +158,6 @@ def ut_eeprom(argv):
             port_list = _rangeexpand(argv[3])
             for port in port_list:
                 print(json.dumps(util.get_qsfpdd_info(port), sort_keys=False, indent=4))
-        # elif argv[2] == '4':
-            # print(util.dump_sfp_eeprom(int(argv[3])))
         elif argv[2] == '6':
             port_list = _rangeexpand(argv[3])
             for port in port_list:
@@ -184,7 +196,7 @@ def ut_ipmi(argv):
 def led_usage(cmd):
     max_port = QSFPDD.MAX_PORT - 1    
     max_beacon = Led.BEACON_MAX
-    print("Usage: " + cmd + " LED 1|2|help [option1] [option2]")
+    print("Usage: " + cmd + " LED 1|2|3|4|5|help [option1] [option2]")
     print("    1: Set System LED")
     print("       option1: 0 for System, 1 for Fan, 2 for PSU0, 3 for PSU1")
     print("       option2: 0 for OFF, 1 for Yellow, 2 for Green")    
@@ -196,7 +208,8 @@ def led_usage(cmd):
     print("       option1: Beacon number, 0-{0}".format(max_beacon))
     print("    4: Auto Test")    
     print("       option1: 0 for System LED, 1 for QSFPDD LED, 2 for Beacon LED")    
-    
+    print("    5: Get System LED")
+    print("       option1: 0 for Fan, 1 for System, 2 for PSU0, 3 for PSU1")    
 
 def ut_led(argv):
     try:
@@ -221,6 +234,10 @@ def ut_led(argv):
                 util.ut_beacon_led()    
             else:
                 led_usage(argv[0])                               
+        elif argv[2] == '5' and len(argv) == 4:
+            led_list = _rangeexpand(argv[3])
+            for led in led_list:                
+                print("[" + str(led) + "] " + json.dumps(util.get_sys_led(int(led)), sort_keys=False, indent=4))        
         else:
             led_usage(argv[0])
     except:
@@ -512,7 +529,7 @@ def ut_thermal(argv):
 def bsp_usage(cmd):
     print("Usage: " + cmd + " BSP 1|help" )
     print("    1: Show BSP version")    
-
+    print("    2: Show BSP Init Status")
 def ut_bsp(argv):
     try:
         util = BSPUtility()
@@ -521,6 +538,8 @@ def ut_bsp(argv):
             bsp_usage(argv[0])
         elif argv[2] == '1':
             print(util.get_version())        
+        elif argv[2] == '2':
+            print(util.is_bsp_inited())        
         else:
             bsp_usage(argv[0])
     except:
@@ -548,7 +567,7 @@ def ut_rov(argv):
 
 def intr_usage(cmd):
     cpld_max = CPLDConst.CPLD_MAX - 1
-    print("Usage: " + cmd + " INTR 1|2|3|4|help [option1]")
+    print("Usage: " + cmd + " INTR 1|2|3|4|5|6|7|8|9|10|11|help [option1]")
     print("    1: Init I2C Alert")
     print("    2: Clear I2C Alert")
     print("    3: Clear All Intr")
@@ -558,6 +577,9 @@ def intr_usage(cmd):
     print("       option1: CPLD number, 0-{0}".format(cpld_max))
     print("    7: Get Gearbox Interrupt")
     print("    8: Get Retimer Interrupt")
+    print("    9: Deinit I2C Alert")
+    print("    10: Get Alert GPIO")
+    print("    11: Get Alert DIS")
 
 def ut_intr(argv):
     try:
@@ -586,14 +608,41 @@ def ut_intr(argv):
             print(json.dumps(util.get_gbox_intr(), sort_keys=False, indent=4))
         elif argv[2] == '8':
             print(json.dumps(util.get_retimer_intr(), sort_keys=False, indent=4))    
+        elif argv[2] == '9':
+            util.deinit_i2c_alert()
+        elif argv[2] == '10':
+            print(util.get_alert_gpio())
+        elif argv[2] == '11':
+            print(util.get_alert_dis())
         else:
             intr_usage(argv[0])
     except:
         raise
         
+def sysfs_usage(cmd):
+    print("Usage: " + cmd + " SYSFS 1|2|help [option1]")
+    print("    1: Dump GPIO sysfs")
+    print("    2: Dump EEPROM sysfs")    
+
+def ut_sysfs(argv):
+    try:
+        ioexp_util = IOExpander()
+        eeprom_util = EEPRomUtility()
+
+        if len(argv) < 3:
+            sysfs_usage(argv[0])
+        elif argv[2] == '1':
+            print(json.dumps(ioexp_util.dump_sysfs(), sort_keys=False, indent=4))
+        elif argv[2] == '2':
+            print(json.dumps(eeprom_util.dump_sysfs(), sort_keys=False, indent=4))                
+        else:
+            sysfs_usage(argv[0])
+    except:
+        raise
+
 def main():
     if len(sys.argv) < 2:
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|SYSFS|help")
         return
 
     if sys.argv[1] == 'CPLD':
@@ -624,15 +673,17 @@ def main():
         ut_rov(sys.argv)    
     elif sys.argv[1] == 'INTR':
         ut_intr(sys.argv)
+    elif sys.argv[1] == 'SYSFS':
+        ut_sysfs(sys.argv)   
     elif sys.argv[1] == 'help':
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|SYSFS|help")
     else:
         print("Invalid arguments:")
 
         # print command line arguments
         for arg in sys.argv[1:]:
             print(arg)
-        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|help")
+        print("\nUsage: " + sys.argv[0] + " CPLD|EEPROM|IPMI|LED|PSU|QSFP|QSFPDD|SFP|UARTMux|USBMux|Thermal|BSP|ROV|INTR|SYSFS|help")
 
 if __name__ == "__main__":
     main()

@@ -20,7 +20,6 @@ from bsp.thermal.thermal import Thermal
 
 class ThermalUtility:
 
-
     def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()
@@ -32,20 +31,19 @@ class ThermalUtility:
 
             return {"cpu_board_tmp75_temp":content}
         except Exception as e:
-            print("get_cpu_board_tmp75 failed, error: {0}".format(str(e)))
+            self.logger.error("get_cpu_board_tmp75 failed, error: {}".format(str(e)))
 
     def get_cpu_core_temp(self):
+        core_num = 8
+        ret_val = {}
+        
         try:
-            package = self.thermal.get_coretemp_cpu(1)
-            core1 = self.thermal.get_coretemp_cpu(2)
-            core2 = self.thermal.get_coretemp_cpu(3)
-            core3 = self.thermal.get_coretemp_cpu(4)
-            core4 = self.thermal.get_coretemp_cpu(5)
+            ret_val["package_temp"] = self.thermal.get_coretemp_cpu(1)
+            for i in range(core_num):
+                key = "core{}_temp".format(i+1)
+                ret_val[key] = self.thermal.get_coretemp_cpu(i+2)
+            
+            return ret_val
 
-            return {"package_temp": package, 
-                    "core1_temp": core1,
-                    "core2_temp": core2, 
-                    "core3_temp": core3,
-                    "core4_temp": core4}
         except Exception as e:
-            print("get_cpu_core_temp failed, error: {0}".format(str(e)))
+            self.logger.error("get_cpu_core_temp failed, error: {0}".format(str(e)))

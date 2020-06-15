@@ -42,13 +42,17 @@ class ROVController:
         retcode, output = subprocess.getstatusoutput(cmd)
         return retcode, output
     
+    def _vid_to_volt_str(self, vid):
+        volt = (vid - 1)*0.005 + 0.25
+        #return str
+        return "{0:.3f}V".format(volt)
+    
     def get_rov_config(self):
         cmd = self.ROV_READ_CMD.format(self.I2C_BUS, 
                                        self.I2C_ADDR, 
                                        self.ROV_CONFIG_REG)
         retcode, output = self._run_i2c_cmd(cmd)
         if retcode != 0:
-            print("get_rov_config failed, cmd={}, output={}".format(cmd, output))
             self.logger.error("get_rov_config failed, cmd={}, output={}".format(cmd, output))
             return 0
         
@@ -61,10 +65,11 @@ class ROVController:
                                         self.ROV_CONFIG[rov_stamp])        
         retcode, output = self._run_i2c_cmd(cmd)
         if retcode != 0:
-            print("set_rov_config failed, cmd={}, output={}".format(cmd, output))
             self.logger.error("set_rov_config failed, cmd={}, output={}".format(cmd, output))
             return False
-        
+        else:
+            self.logger.info("set_rov_config addr=0x{:02X}, rov_stamp=0x{:02X}, rov_voltage={}".format(
+            self.I2C_ADDR, rov_stamp, self._vid_to_volt_str(self.ROV_CONFIG[rov_stamp])))
         return True
     
     def get_rov_output(self):
@@ -73,7 +78,6 @@ class ROVController:
                                        self.ROV_OUTPUT_REG)
         retcode, output = self._run_i2c_cmd(cmd)
         if retcode != 0:
-            print("get_rov_output failed, cmd={}, output={}".format(cmd, output))
             self.logger.error("get_rov_output failed, cmd={}, output={}".format(cmd, output))
             return 0
         

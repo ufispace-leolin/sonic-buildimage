@@ -49,7 +49,7 @@ class QSFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_presence failed, port_num={0}, error: {1}".format(port_num, e))                  
+            self.logger.error("get_presence failed, port_num={0}, error: {1}".format(port_num, e))                  
 
     def get_interrupt(self, port_num):
         try:
@@ -64,7 +64,7 @@ class QSFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_port_interrupt failed, error: {0}".format(e))
+            self.logger.error("get_port_interrupt failed, error: {0}".format(e))
             
     def set_lp_mode(self, port_num, enable):
         try:
@@ -75,7 +75,7 @@ class QSFPUtility:
 
             self.cpld.qsfp_set_lp_mode(port_num, enable)
         except Exception as e:
-            print("set_lp_mode failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("set_lp_mode failed, port_num={0}, error: {1}".format(port_num, e))
 
     def get_lp_mode(self, port_num):
         try:
@@ -90,7 +90,7 @@ class QSFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_lp_mode failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_lp_mode failed, port_num={0}, error: {1}".format(port_num, e))
 
     def reset_port(self, port_num):
         try:
@@ -98,7 +98,7 @@ class QSFPUtility:
 
             self.cpld.qsfp_reset_port(port_num)
         except Exception as e:
-            print("reset_port failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("reset_port failed, port_num={0}, error: {1}".format(port_num, e))
     
     def get_reset(self, port_num):
         try:
@@ -112,7 +112,7 @@ class QSFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_reset failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_reset failed, port_num={0}, error: {1}".format(port_num, e))
     
     def set_reset(self, port_num, reset):
         try:
@@ -121,4 +121,4 @@ class QSFPUtility:
 
             self.cpld.qsfp_set_reset(port_num, reset)            
         except Exception as e:
-            print("set_reset failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("set_reset failed, port_num={0}, error: {1}".format(port_num, e))

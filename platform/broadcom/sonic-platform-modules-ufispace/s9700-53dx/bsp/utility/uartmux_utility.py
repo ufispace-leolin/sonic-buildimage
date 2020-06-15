@@ -20,6 +20,7 @@ from bsp.gpio.ioexp import IOExpander
 from bsp.ipmi.ipmitool import IPMITool
 from bsp.const.const import UARTMux
 from bsp.const.const import BID
+from bsp.utility.board_id_utility import BrdIDUtility
 
 class UARTMuxUtility:
 
@@ -28,7 +29,8 @@ class UARTMuxUtility:
         self.logger = log.getLogger()
         self.ioexp = IOExpander()
         self.ipmitool = IPMITool()
-        self.board_id = self.ioexp.preinit_get_board_id()
+        self.brd_id_util = BrdIDUtility()
+        self.board_id = self.brd_id_util.get_board_id()
     
     def set_uart_mux(self, source):
         try:
@@ -39,4 +41,4 @@ class UARTMuxUtility:
             else:
                 self.ipmitool.set_uart_mux(source)
         except Exception as e:
-            print("set_uart_mux {0} failed, error: {1}".format(source, e))
+            self.logger.error("set_uart_mux {} failed, error: {}".format(source, e))

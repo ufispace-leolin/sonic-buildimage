@@ -17,19 +17,35 @@
 
 from bsp.common.logger import Logger
 from bsp.const.const import Led
-from bsp.gpio.ioexp import IOExpander
 from bsp.const.const import BID
 from bsp.cpld.cpld import CPLD
+from bsp.utility.board_id_utility import BrdIDUtility
 
 class SYS_LED:        
         
     def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()
-        self.ioexp = IOExpander()
-        self.board_id = self.ioexp.preinit_get_board_id() 
+        self.brd_id_util = BrdIDUtility()
+        self.board_id = self.brd_id_util.get_board_id()
+         
         self.cpld = CPLD()       
                  
+    def get_sys_led(self, target):
+        try:
+            reg_val = self.cpld.get_sys_led(target)
+            
+            # get color
+            color = reg_val & Led.MASK_COLOR
+            blink = (reg_val & Led.MASK_BLINK) >> 2
+            onoff = (reg_val & Led.MASK_ONOFF) >> 3
+                        
+            return (color, blink, onoff)
+                
+        except Exception as e:  
+            self.logger.error(e)          
+            raise       
+
     def set_led(self, target, color, blink):
         # disable set_led function due to this design will be changed in the future.
         return

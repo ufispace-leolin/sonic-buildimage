@@ -30,11 +30,11 @@ class IPMIUtility:
             sensors = self.ipmitool.get_sensor(keyword)
             return sensors
         except Exception as e:
-            print("get_sensor failed, error: {0}".format(e))
+            self.logger.error("get_sensor failed, error: {0}".format(e))
     
     def get_ipmidev_status(self):
         try:
             is_exist = self.ipmitool.is_ipmidev_exist()
             return {"is_ipmidev_exist": is_exist}
         except Exception as e:
-            print("is_ipmidev_exist() failed, error: {0}".format(e))
+            self.logger.error("is_ipmidev_exist() failed, error: {0}".format(e))

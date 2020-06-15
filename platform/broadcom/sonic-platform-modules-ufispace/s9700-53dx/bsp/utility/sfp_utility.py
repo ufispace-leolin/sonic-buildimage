@@ -54,7 +54,7 @@ class SFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_presence failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_presence failed, port_num={0}, error: {1}".format(port_num, e))
 
     def get_rx_los(self, port_num):
         try:
@@ -69,7 +69,7 @@ class SFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_rx_los failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_rx_los failed, port_num={0}, error: {1}".format(port_num, e))
 
     def get_tx_fault(self, port_num):
         try:
@@ -84,7 +84,7 @@ class SFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_tx_fault failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_tx_fault failed, port_num={0}, error: {1}".format(port_num, e))
 
     def set_tx_disable(self, port_num, tx_disable):
         try:
@@ -95,7 +95,7 @@ class SFPUtility:
             
             self.cpld.sfp_set_tx_disable(port_num, tx_disable)
         except Exception as e:
-            print("set_tx_disable failed, port_num={0}, tx_disable={1}, error: {2}".format(port_num, tx_disable, e))
+            self.logger.error("set_tx_disable failed, port_num={0}, tx_disable={1}, error: {2}".format(port_num, tx_disable, e))
 
     def get_tx_disable(self, port_num):
         try:
@@ -110,4 +110,5 @@ class SFPUtility:
 
             return ret_val
         except Exception as e:
-            print("get_tx_disable failed, port_num={0}, error: {1}".format(port_num, e))
+            self.logger.error("get_tx_disable failed, port_num={0}, error: {1}".format(port_num, e))
+

@@ -92,7 +92,7 @@ class Led(IntEnum):
     BEACON_MAX = 255
 
     MASK_COLOR = 0b0001
-    MASK_BLINK = 0b0010
+    MASK_BLINK = 0b0100
     MASK_ONOFF = 0b1000
     
 class CPLDConst(IntEnum):
@@ -140,10 +140,10 @@ class BID(IntEnum):
     NCP1_1_PROTO = 32
     NCP1_1_ALPHA = 36
     NCP1_1_BETA  = 40
-    MODEL_ID_BIT  = 0b11110000
-    HW_REV_BIT    = 0b00001100
-    BUILD_REV_BIT = 0b00000011
-    BUILD_REV_MASK = 0b11111100
+    #MODEL_ID_BIT  = 0b01110000
+    #HW_REV_BIT    = 0b00001100
+    #BUILD_REV_BIT = 0b00000011
+    BUILD_REV_MASK = 0b01111100
 
 class DevType(IntEnum):
     J2 = 0
@@ -152,7 +152,10 @@ class DevType(IntEnum):
     CS4227 = 3
     OP2 = 4
     PEX8724 = 5    
-    DEV_MAX = 6
+    OP2_CRST = 6
+    OP2_PERST = 7
+    OP2_SRST = 8
+    DEV_MAX = 9
 
 class ResetStatus(IntEnum):
     RESET = 0

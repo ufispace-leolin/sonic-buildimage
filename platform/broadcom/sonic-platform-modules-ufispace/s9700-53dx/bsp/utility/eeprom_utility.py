@@ -20,7 +20,6 @@ from bsp.eeprom.eeprom import EEPRom
 from bsp.const.const import QSFP
 from bsp.const.const import QSFPDD
 from bsp.const.const import PortStatus
-from bsp.gpio.ioexp import IOExpander
 from bsp.cpld.cpld import CPLD
 
 class EEPRomUtility:
@@ -28,9 +27,7 @@ class EEPRomUtility:
     def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()
-        self.ioexp = IOExpander()
-        self.board_id = self.ioexp.preinit_get_board_id()
-        self.eeprom = EEPRom(self.board_id)
+        self.eeprom = EEPRom()
         self.cpld = CPLD()
 
     def _check_qsfp_port(self, port_num):
@@ -119,3 +116,12 @@ class EEPRomUtility:
             return bus_num
         except Exception:
             raise
+
+    def dump_sysfs(self):
+        try:
+            content = self.eeprom.dump_sysfs()
+
+            return content
+        except Exception:
+            raise
+
