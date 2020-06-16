@@ -357,7 +357,8 @@ class PlatformUtility:
                             
     def pre_init(self):
         self._check_bsp_init()
-        self._check_ko()
+        # don't check ko for sonic platform
+        #self._check_ko()
         self._check_intr()
         retcode = self.i2c_mux.pre_init()
         if retcode != 0:

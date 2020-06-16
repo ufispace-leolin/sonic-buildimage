@@ -174,8 +174,8 @@ class EEPRom:
                 if eeprom_sysfs_path == "":
                     self.logger.error("[_create_eeprom_sysfs] create sysfs failed, dev_name={}, port={}".format(dev_name, port))
                 elif os.path.exists(eeprom_sysfs_path):
-                pass
-            else:
+                    pass
+                else:
                     with open(bus_path + "/" + self.sysfs_util.OP_NEW_DEV, "w") as f:
                         f.write("{} {}".format(driver_type, 
                                                hex(i2c_addr)))
@@ -226,7 +226,7 @@ class EEPRom:
         elif dev_type == self.DEV_TYPE_QSFPDD:
             fn_bus_num = self._get_qsfpdd_bus_num
             bus_num = fn_bus_num(port)
-                else:
+        else:
             self.logger.error("invalid dev_type {}".format(dev_type))
             return ""
                                   
