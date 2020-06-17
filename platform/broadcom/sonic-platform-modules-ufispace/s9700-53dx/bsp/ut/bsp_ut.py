@@ -128,7 +128,7 @@ def eeprom_usage(cmd):
     print("    5: Get EEPROM info from specific QSFPDD port")
     print("       option1: Port number, 0-{0}".format(qsfpdd_max_port))
     print("    6: Get EEPROM i2c bus num from specific QSFP port")
-    print("       option1: Port number, 0-{0}".format(qsfp_max_port))
+    print("       option1: Port number, 0-{0}".format(ports))
     print("    7: Get EEPROM i2c bus num from specific QSFPDD port")
     print("       option1: Port number, 0-{0}".format(qsfpdd_max_port))
 
